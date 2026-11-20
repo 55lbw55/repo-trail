@@ -3,6 +3,7 @@
 import posixpath
 import re
 import shlex
+import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -24,6 +25,7 @@ GO_SQUASH = re.compile(r'^\s*(?:\w+\s+)?\*?(\w+)\.(\w+)\s+`[^`]*mapstructure:",s
 COBRA_COMMAND = re.compile(r'^\s*(\w+)\s*:?=\s*&cobra\.Command\{([^{}]*)', re.M)
 COBRA_USE = re.compile(r'\bUse:\s*"(\w[\w-]*)\s+([A-Z][A-Z0-9_-]*)"')
 COBRA_FLAG = re.compile(r'\b(\w+)\.Flags\(\)\.(String|StringSlice|Int|Bool)(P)?\("([\w-]+)"(?:,\s*"([\w-]+)")?')
+SETUP_INSTALL = re.compile(r"^\s*(?:\$\s+)?(python(?:3(?:\.\d+)?)?)\s+(?:\./)?setup\.py\s+install\b")
 
 
 @dataclass(frozen=True)
@@ -216,6 +218,34 @@ def command_finding(path, examples, reference, program, commands):
     return None
 
 
+def packaging_reference(snapshot):
+    if "setup.py" in snapshot.paths or "pyproject.toml" not in snapshot.files:
+        return None
+    try:
+        source = snapshot.text("pyproject.toml")
+        manifest = tomllib.loads(source)
+    except (CacheMiss, RateLimited, ResourceUnavailable, ValueError):
+        return None
+    if not manifest.get("project", {}).get("name") or not manifest.get("build-system"):
+        return None
+    return next((number for number, line in enumerate(source.splitlines(), 1)
+                 if line.strip() == "[build-system]"), None)
+
+
+def install_finding(path, examples, reference_line):
+    if re.search(r"(?:change.?log|history|migration|release|archive)", path, re.I):
+        return None
+    for language, block in examples:
+        if language not in {"", "console", "bash", "sh", "shell", "zsh", "powershell", "pwsh"}:
+            continue
+        for number, line in block:
+            match = SETUP_INSTALL.match(line)
+            if match:
+                return Finding(path, number, line.strip(), f"{match[1]} -m pip install .",
+                               "pyproject.toml", reference_line)
+    return None
+
+
 def scan(snapshot, args, keywords):
     paths = [path for path, row in snapshot.files.items() if document(path, row)]
     size = scale(len(snapshot.files), len(paths))
@@ -248,6 +278,9 @@ def scan(snapshot, args, keywords):
     tags = {}
     commands = {}
     reference = None
+    packaging_line = packaging_reference(snapshot)
+    if packaging_line:
+        report += [f"安装命令对照 · [pyproject.toml]({snapshot.link('pyproject.toml', packaging_line)})", ""]
     if args.reference:
         reference = public_path(args.reference)
         if not reference.endswith(".go"):
@@ -284,6 +317,8 @@ def scan(snapshot, args, keywords):
             result = config_finding(path, examples, tags) if tags else None
             if not result and commands:
                 result = command_finding(path, examples, reference, snapshot.repo.split("/")[-1], commands)
+            if not result and packaging_line:
+                result = install_finding(path, examples, packaging_line)
             result = result or link_finding(path, paragraph, snapshot.paths, by_name)
             if result:
                 break

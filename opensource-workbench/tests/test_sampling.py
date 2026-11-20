@@ -93,6 +93,21 @@ class SamplingTests(unittest.TestCase):
         self.assertTrue(human_body)
         self.assertEqual(snapshot.reads, ["AGENTS.md", "docs/AGENTS.md"])
 
+    def test_stale_setup_command_needs_packaging_manifest_and_missing_script(self):
+        contents = {
+            "docs/install.md": "```console\n$ python setup.py install\n```\n",
+            "pyproject.toml": '[build-system]\nrequires = ["setuptools"]\n[project]\nname = "tool"\n',
+        }
+        result = scan(Snapshot(contents), options(), ["install"])
+        self.assertTrue(any("python -m pip install ." in line for line in result))
+        result = scan(Snapshot(contents | {"setup.py": "# local installer"}), options(), ["install"])
+        self.assertFalse(any("python -m pip install ." in line for line in result))
+
+    def test_policy_recognizes_human_issue_body(self):
+        snapshot = Snapshot({"AGENTS.md": "If you are opening an issue, we expect you to describe the problem in your own words."})
+        _, human_body = policy(snapshot, [])
+        self.assertTrue(human_body)
+
 
 if __name__ == "__main__":
     unittest.main()

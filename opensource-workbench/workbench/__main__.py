@@ -60,6 +60,9 @@ def parser():
     draft.add_argument("--pr-base", help="GitHub 上游目标分支")
     draft.add_argument("--pr-head", help="已推送并审查的 GitHub 分支，格式 owner:branch")
     draft.add_argument("--pr-head-sha", help="已核对的远端 head 完整 SHA")
+    draft.add_argument("--verify-publication", type=int, help="通过 GitHub REST 核对已公开的 Issue 或 PR 编号")
+    draft.add_argument("--published-by", help="回执应核对的 GitHub 发布者")
+    draft.add_argument("--expected-publication", type=Path, help="可选，用发布审查稿核对标题与正文")
     draft.add_argument("--scan", action="store_true", help="按项目规模抽查 Markdown，以单个线索为上限")
     draft.add_argument("--scope", help="抽查目录或文件，相对仓库根目录")
     draft.add_argument("--reference", help="可选 Go 文件，用 mapstructure 或 Cobra 定义对照示例")
@@ -68,7 +71,7 @@ def parser():
     draft.add_argument("--scan-max-files", type=int, choices=range(1, 61), default=25, metavar="1–60")
 
     for action in (find, plan, draft):
-        action.add_argument("--keywords", required=True, help="可发送给 GitHub 的公开关键词")
+        action.add_argument("--keywords", required=action is not draft, help="可发送给 GitHub 的公开关键词")
         action.add_argument("--out", type=Path, help="Markdown 输出，默认标准输出")
     return command
 
@@ -94,6 +97,7 @@ def main():
     args = parser().parse_args()
     api = None
     try:
+        verify = getattr(args, "verify_publication", None)
         patch = getattr(args, "patch", None)
         publish_out = getattr(args, "publish_out", None)
         paths = [path for path in (args.out, patch, publish_out) if path is not None]
@@ -118,6 +122,23 @@ def main():
         if args.action == "contribution-draft" and args.route == "direct-pr" and not args.policy_reviewed:
             raise WorkbenchError("准备直接 PR 前须人工核对贡献规则和外链。")
         if args.action == "contribution-draft":
+            if verify is not None:
+                if (verify < 1 or not args.published_by or args.offline or args.publish or args.scan or args.evidence
+                    or patch or publish_out or args.open_chrome or args.issue or args.related_pr
+                    or args.pr_base or args.pr_head or args.pr_head_sha):
+                    raise WorkbenchError("发布回执需要联网、正整数编号与 --published-by，并单独运行。")
+                from .submission import verify_publication
+                api = GitHub(args.cache_dir or cache_directory(None, False), refresh=args.refresh)
+                content = "\n".join(verify_publication(api, args.repo, verify, args.published_by,
+                                                       args.expected_publication)).rstrip() + "\n"
+                if args.out:
+                    with args.out.open("x", encoding="utf-8", newline="\n") as stream:
+                        stream.write(content)
+                else:
+                    print(content, end="")
+                return 0
+            if not args.keywords or args.published_by or args.expected_publication:
+                raise WorkbenchError("贡献流程需要 --keywords。回执参数仅用于 --verify-publication。")
             if args.publish and (args.offline or args.scan or not args.evidence or not args.policy_reviewed or not publish_out):
                 raise WorkbenchError("发布审查需要联网、证据、--policy-reviewed 和 --publish-out。")
             if not args.publish and (publish_out or args.open_chrome):

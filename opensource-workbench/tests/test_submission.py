@@ -1,9 +1,11 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 from workbench.github import WorkbenchError
-from workbench.submission import prepare_handoff
+from workbench.submission import prepare_handoff, verify_publication
 
 BASE = "a" * 40
 HEAD = "b" * 40
@@ -59,6 +61,18 @@ class SubmissionTests(unittest.TestCase):
                                   SPEC, EVIDENCE, None, [])
         self.assertTrue(handoff.chrome_url().endswith("/issues/new/choose"))
 
+    def test_reviewed_markdown_template_preserves_body_fields(self):
+        snapshot = Snapshot((".github/ISSUE_TEMPLATE/bug.md",))
+        args = SimpleNamespace(publish="issue")
+        form = SPEC | {"issue_template": "bug.md", "issue_body": "## Reproduction\n\nOpen the setup guide."}
+        handoff = prepare_handoff(API({"has_issues": True}), snapshot, args, form, EVIDENCE, None, [])
+        query = parse_qs(urlsplit(handoff.chrome_url()).query)
+        self.assertEqual(query["template"], ["bug.md"])
+        self.assertIn(form["issue_body"], query["body"][0])
+        with self.assertRaises(WorkbenchError):
+            prepare_handoff(API({"has_issues": True}), snapshot, args, form | {"issue_template": "other.md"},
+                            EVIDENCE, None, [])
+
     def test_disabled_issues_and_potential_secrets_are_rejected(self):
         args = SimpleNamespace(publish="issue")
         for api, spec in ((API({"has_issues": False}), SPEC),
@@ -80,3 +94,18 @@ class SubmissionTests(unittest.TestCase):
         for drift in ({"base_commit": {"sha": HEAD}}, {"files": [{"filename": "extra.py"}]}):
             with self.assertRaises(WorkbenchError):
                 prepare_handoff(API(remote | drift), Snapshot(), args, SPEC, EVIDENCE, None, [])
+
+    def test_receipt_requires_matching_author_and_approved_text(self):
+        snapshot = Snapshot()
+        handoff = prepare_handoff(API({"has_issues": True}), snapshot, SimpleNamespace(publish="issue"),
+                                  SPEC, EVIDENCE, None, [])
+        data = {"number": 17, "user": {"login": "Example"}, "title": handoff.title, "body": handoff.body}
+        with TemporaryDirectory() as directory:
+            review = Path(directory) / "review.md"
+            review.write_text(handoff.review(snapshot), encoding="utf-8")
+            receipt = verify_publication(API(data), snapshot.repo, 17, "example", review)
+            self.assertIn("https://github.com/example/library/issues/17", "\n".join(receipt))
+            with self.assertRaises(WorkbenchError):
+                verify_publication(API(data), snapshot.repo, 17, "other", review)
+            with self.assertRaises(WorkbenchError):
+                verify_publication(API(data | {"body": "different"}), snapshot.repo, 17, "example", review)

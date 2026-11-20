@@ -1,6 +1,6 @@
 # 开源工作台
 
-当前版本 0.3.0。
+当前版本 0.4.0。
 
 在本地检索公开 GitHub 仓库、评估代码复用，并为单个上游问题准备证据、草稿和补丁。需要 Python 3.11+ 和 Git。以下命令在本目录运行，示例使用 PowerShell 7。在已激活的 Python 虚拟环境中安装 [已核验的 platformdirs 发行包](third_party/platformdirs.md)。
 
@@ -64,7 +64,15 @@ python -m workbench contribution-draft --repo owner/repo --keywords 'public symp
 
 `--publish issue` 重新在线核对 Issue 和 PR，检查仓库是否接收 Issue，输出目标、准确标题和正文。已有对应 Issue 时沿用它，已发现对应 PR 时使用 `--related-pr`。只有确认搜索命中均无关时才加 `--related-reviewed`。从审查稿打开 GitHub，按上游模板核对后点击提交。也可使用新的输出文件路径重跑并加 `--open-chrome`。普通表单可以预填，使用自定义模板时会打开 GitHub 模板选择页，正文可从审查稿复制。
 
+需要保留上游 Markdown 模板的栏目时，在证据 JSON 中提供已经按模板填写的 `issue_body`。如有多个模板，同时提供仓库中存在的 `issue_template` 文件名，例如 `bug.md`。CLI 核对模板文件并追加证据链接。使用 YAML 表单时，在 GitHub 模板页填写相应字段。
+
 PR 使用 `--publish pr --publish-out pr-review.md`，同时提供 `--patch`、`--pr-base main`、`--pr-head owner:branch` 和已审查的 `--pr-head-sha`。分支须已推送，程序会核对远端 base、head 和改动文件列表，并交接到 Chrome 比较页。最终 diff 以 GitHub 比较页为准。上游要求真人撰写时，从贡献报告中的规则链接和本地验证材料手动填写。
+
+提交后，使用回执核对 GitHub 编号、作者和审查稿正文。回执只查询公开内容。
+
+```powershell
+python -m workbench contribution-draft --repo owner/repo --verify-publication 123 --published-by owner --expected-publication issue-review.md --out receipt.md
+```
 
 ### 按规模抽查上游
 
@@ -74,7 +82,7 @@ python -m workbench contribution-draft --repo ollama/ollama --scan --scope docs 
 
 - 先以固定 commit 的文件树判定规模。普通文件达到 1,000 个或符合条件的 Markdown 文件达到 200 个，视为大型。达到 200 个普通文件或 40 个 Markdown 文件，视为中型。可以用 `--scope` 缩小到模块、目录或单个文件。
 - 中型和大型项目每轮检查范围内约 5% 的 Markdown 文件，向上取整，至少 1 个。小型项目每轮最多检查 12 个。路径关键词决定优先级，同优先级按固定 commit 的散列排序。没有命中时自动检查下一批，默认 2 轮、最多 25 个文档。用 `--scan-rounds` 和 `--scan-max-files` 调整。命中即停，报告记录实际覆盖率。这里的百分比以选定范围的可读候选文档为分母。
-- 基础检查寻找可定位新目标的 Markdown 相对链接。如果指定 `--reference`，还可把 YAML 示例与 Go 的 `mapstructure` 字段对照，或把短命令示例与 Cobra 定义对照。发现显式嵌入的共享配置时会再追一层，最多查三个同仓库的 `config.go`。抽查线索须经过人工核实。覆盖范围、文件大小和支持的例子语法决定了能找到的问题。
+- 基础检查寻找可定位新目标的 Markdown 相对链接，以及源码已迁移到 `pyproject.toml` 后残留的 `setup.py install` 示例。如果指定 `--reference`，还可把 YAML 示例与 Go 的 `mapstructure` 字段对照，或把短命令示例与 Cobra 定义对照。发现显式嵌入的共享配置时会再追一层，最多查三个同仓库的 `config.go`。抽查线索须经过人工核实。覆盖范围、文件大小和支持的例子语法决定了能找到的问题。
 - REST 受限期间，可传入已在本地的 Git 仓库 `--local-repo PATH`，例如已有的浅克隆。CLI 从 commit 对象读取，校验 `origin` 指向指定的 GitHub HTTPS 仓库。可结合 `--offline` 只读本地对象与已有查询缓存。提交前仍应确认本地 commit 已存在于上游。
 - 抽查后用证据 JSON 进入原有去重和补丁工作流。查询不可用时，报告将去重标为待完成。确认已有 PR 覆盖改动后，可用 `--related-pr 编号` 保留本地证据和验证补丁。上游要求真人撰写 PR 正文时可用 `--human-pr-body`，常见的明确规则也会触发该行为。测试运行 `python -m unittest discover -s tests -v`。
 
