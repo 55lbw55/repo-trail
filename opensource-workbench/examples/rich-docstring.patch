@@ -1,0 +1,24 @@
+--- a/rich/logging.py
++++ b/rich/logging.py
+@@ -52,7 +52,7 @@
+         locals_max_length (int, optional): Maximum length of containers before abbreviating, or None for no abbreviation.
+             Defaults to 10.
+         locals_max_string (int, optional): Maximum length of string before truncating, or None to disable. Defaults to 80.
+-        log_time_format (str | TimeFormatterCallable, optional): If ``log_time`` is enabled, either string for strftime or callable that formats the time. Defaults to "[%x %X] ".
++        log_time_format (str | FormatTimeCallable, optional): If ``log_time`` is enabled, either string for strftime or callable that formats the time. Defaults to "[%x %X] ".
+         keywords (list[str], optional): List of words to highlight instead of ``RichHandler.KEYWORDS``.
+     """
+ 
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -6,6 +6,10 @@
+ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+ 
+ ## Unreleased
++
++### Fixed
++
++- Fixed the documented callable type for the RichHandler log_time_format parameter.
+ 
+ ### Changed
+ 

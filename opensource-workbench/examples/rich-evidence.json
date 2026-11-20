@@ -1,0 +1,55 @@
+{
+  "title": "Use FormatTimeCallable in the RichHandler docstring",
+  "impact": "Readers looking up the log_time_format callable type by the name in the parameter documentation are directed to a name that differs from the signature.",
+  "expected_behavior": "The RichHandler parameter documentation names FormatTimeCallable, matching the constructor annotation.",
+  "actual_behavior": "The RichHandler docstring names TimeFormatterCallable, whereas the constructor uses FormatTimeCallable.",
+  "expected": {
+    "path": "rich/logging.py",
+    "text": "log_time_format: str | FormatTimeCallable"
+  },
+  "actual": {
+    "path": "rich/logging.py",
+    "text": "log_time_format (str | TimeFormatterCallable"
+  },
+  "edits": [
+    {
+      "path": "rich/logging.py",
+      "before": "log_time_format (str | TimeFormatterCallable",
+      "after": "log_time_format (str | FormatTimeCallable"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "before": "## Unreleased\n\n### Changed",
+      "after": "## Unreleased\n\n### Fixed\n\n- Fixed the documented callable type for the RichHandler log_time_format parameter.\n\n### Changed"
+    }
+  ],
+  "pr_checklists": [
+    {
+      "heading": "Type of changes",
+      "items": [
+        {"label": "Bug fix", "checked": false},
+        {"label": "New feature", "checked": false},
+        {"label": "Documentation / docstrings", "checked": true},
+        {"label": "Tests", "checked": false},
+        {"label": "Other", "checked": false}
+      ]
+    },
+    {
+      "heading": "AI?",
+      "items": [
+        {"label": "AI was used to generate this PR", "checked": true}
+      ]
+    },
+    {
+      "heading": "Checklist",
+      "items": [
+        {"label": "Run Black on new code, if applicable", "checked": false},
+        {"label": "Update CHANGELOG.md and CONTRIBUTORS.md where appropriate (changelog updated)", "checked": true},
+        {"label": "Add tests for new code, if applicable", "checked": false},
+        {"label": "Contributor accepts the project's review checklist", "checked": false}
+      ]
+    }
+  ],
+  "assistance": "OpenAI Codex",
+  "submission_note": "Rich's AI policy requires approval of the proposed solution by @willmcgugan in the linked issue or discussion, disclosure of OpenAI Codex, and completion of the PR template. Maintainer approval is unverified."
+}
