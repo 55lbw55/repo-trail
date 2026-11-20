@@ -1,6 +1,10 @@
 # 开源工作台
 
-在本地检索公开 GitHub 仓库、评估代码复用，并为单个上游问题准备证据、草稿和补丁。需要 Python 3.11+ 和 Git，运行时只用 Python 标准库。以下命令在本目录运行，示例使用 PowerShell 7。
+在本地检索公开 GitHub 仓库、评估代码复用，并为单个上游问题准备证据、草稿和补丁。需要 Python 3.11+ 和 Git。以下命令在本目录运行，示例使用 PowerShell 7。在已激活的 Python 虚拟环境中安装 [已核验的 platformdirs 发行包](third_party/platformdirs.md)。
+
+```powershell
+python -m pip install --only-binary=:all: --require-hashes -r requirements.txt
+```
 
 ## 演示
 
@@ -53,6 +57,6 @@ python -m workbench contribution-draft --repo Textualize/rich --ref 3a109ccdffe5
 ## 缓存、数据与验证边界
 
 - 加 `--out 新文件.md` 输出 UTF-8 Markdown，默认输出到终端。补丁单独写入指定文件。复用补丁可能包含目标项目的清单 diff，应留在本地审查。
-- 公开数据通过 `api.github.com` 的 REST GET 匿名访问。公开查询和固定版本对象缓存到 SQLite，可在子命令前用 `--cache-dir` 指定位置、用 `--offline` 离线、用 `--refresh` 重新查询。按 GitHub 的限流响应暂停相应请求；查询会在额度耗尽时给出可重试时间。 [GitHub REST 限流说明](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
+- 公开数据通过 `api.github.com` 的 REST GET 匿名访问。公开查询和固定版本对象缓存到 SQLite，默认使用当前用户的平台缓存目录，例如 Windows 的 `%LOCALAPPDATA%\repo-trail\Cache` 或 Linux 的 `~/.cache/repo-trail`。在子命令前用 `--cache-dir` 覆盖位置、用 `--offline` 离线、用 `--refresh` 重新查询。平台缓存数据库还未创建时，离线模式可以继续读取当前目录下已有的 `.workbench-cache`。也可显式传 `--cache-dir .workbench-cache` 使用旧缓存。按 GitHub 的限流响应暂停相应请求，查询会在额度耗尽时给出可重试时间。[GitHub REST 限流说明](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)
 - 功能原文、本地目录名、项目清单内容和 Git 身份不会写入 Markdown 或发送给 GitHub。关键词与证据文件是显式的公开输入，只填写可公开资料。公开仓库文本作为资料读取；CLI 不执行第三方安装、构建、测试、仓库指令或 Git hooks。
 - 搜索依据为公开索引、README、源码路径及静态读取的清单。目标平台和依赖锁定由接入方实际验证。贡献草稿由已确认的精确证据驱动，政策语义、问题重复性与维护者许可由人确认。

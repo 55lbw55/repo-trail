@@ -1,0 +1,2 @@
+# Verified against the PyPI release wheel. See third_party/platformdirs.md.
+platformdirs==4.14.8 --hash=sha256:1e34af590de4d978631b751eb2202f2fee4497537a17c1720b12fcf57b331392

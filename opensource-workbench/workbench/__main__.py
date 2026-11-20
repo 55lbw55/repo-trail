@@ -5,6 +5,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from platformdirs import user_cache_path
+
 from .contribution import contribution_draft
 from .github import GitHub, WorkbenchError
 from .reuse import reuse_plan, search
@@ -12,7 +14,7 @@ from .reuse import reuse_plan, search
 
 def parser():
     command = argparse.ArgumentParser(prog="python -m workbench", description="开源工作台")
-    command.add_argument("--cache-dir", type=Path, default=Path(".workbench-cache"))
+    command.add_argument("--cache-dir", type=Path, help="覆盖平台默认的用户缓存目录")
     cache_mode = command.add_mutually_exclusive_group()
     cache_mode.add_argument("--offline", action="store_true", help="仅用已有公开缓存")
     cache_mode.add_argument("--refresh", action="store_true", help="重新查询 GitHub REST")
@@ -61,6 +63,17 @@ def output_path(path):
             raise WorkbenchError("输出须使用位于已有目录中的新文件路径。")
 
 
+def cache_directory(explicit, offline):
+    if explicit is not None:
+        return explicit
+    default = user_cache_path("repo-trail", appauthor=False)
+    if offline and not (default / "public.sqlite3").is_file():
+        legacy = Path.cwd() / ".workbench-cache"
+        if (legacy / "public.sqlite3").is_file():
+            return legacy
+    return default
+
+
 def main():
     args = parser().parse_args()
     api = None
@@ -78,7 +91,7 @@ def main():
             raise WorkbenchError("Issue 编号须为正整数。")
         if args.action == "contribution-draft" and args.route == "direct-pr" and not args.policy_reviewed:
             raise WorkbenchError("准备直接 PR 前须人工核对贡献规则和外链。")
-        api = GitHub(args.cache_dir, args.offline, args.refresh)
+        api = GitHub(cache_directory(args.cache_dir, args.offline), args.offline, args.refresh)
         handler = {"search": search, "reuse-plan": reuse_plan, "contribution-draft": contribution_draft}
         content = "\n".join(handler[args.action](api, args)).rstrip() + "\n"
         if args.out:
