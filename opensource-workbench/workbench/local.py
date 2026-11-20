@@ -7,7 +7,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from .github import WorkbenchError
+from .github import ResourceUnavailable, Snapshot, WorkbenchError, repo_name
 
 
 def git(directory, *args, data=None, index=None):
@@ -28,6 +28,43 @@ def git(directory, *args, data=None, index=None):
     if result.returncode:
         raise WorkbenchError(f"Git {args[0]} 失败，请核对仓库状态、分支、补丁或本地 Git 身份。")
     return result.stdout
+
+
+class GitSnapshot(Snapshot):
+    """Read tracked blobs from an explicitly provided Git repository, without a checkout."""
+
+    def __init__(self, directory, repo, ref):
+        self.directory = directory
+        self.repo = repo_name(repo)
+        self.endpoint = f"/repos/{self.repo}"
+        if ref != "HEAD" and not re.fullmatch(r"[0-9a-f]{40}", ref):
+            raise WorkbenchError("指定的上游 commit 必须是完整的 40 位 SHA。")
+        url = git(directory, "config", "--local", "--get", "remote.origin.url").decode().strip()
+        if url.casefold().removesuffix(".git") != f"https://github.com/{self.repo}".casefold():
+            raise WorkbenchError("本地快照的 origin 须为 --repo 对应的 GitHub HTTPS 地址。")
+        self.sha = git(directory, "rev-parse", "--verify", f"{ref}^{{commit}}").decode().strip()
+        output = git(directory, "ls-tree", "-rltz", self.sha)
+        self.paths = set()
+        self.files = {}
+        self.incomplete = False
+        for entry in output.split(b"\0"):
+            if not entry:
+                continue
+            metadata, raw_path = entry.split(b"\t", 1)
+            try:
+                path = raw_path.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            mode, kind, blob, size = metadata.decode("ascii").split()
+            self.paths.add(path)
+            if kind == "blob" and mode in {"100644", "100755"}:
+                self.files[path] = {"sha": blob, "size": int(size)}
+
+    def read(self, path):
+        entry = self.files.get(path)
+        if not entry or entry["size"] > 262144:
+            raise ResourceUnavailable("上游文件不存在、不是普通文件或超过 256 KiB。")
+        return git(self.directory, "cat-file", "blob", entry["sha"])
 
 
 def normalize_package(name):

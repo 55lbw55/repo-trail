@@ -24,6 +24,10 @@ class RateLimited(WorkbenchError):
     pass
 
 
+class CacheMiss(WorkbenchError):
+    pass
+
+
 def repo_name(value):
     value = value.removeprefix("https://github.com/").rstrip("/").removesuffix(".git")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+", value):
@@ -71,7 +75,7 @@ class GitHub:
         if cached and (self.offline or not self.refresh and time.time() - cached[0] < ttl):
             return json.loads(cached[1])
         if self.offline:
-            raise WorkbenchError("离线模式缺少对应的公开查询缓存。")
+            raise CacheMiss("离线模式缺少对应的公开查询缓存。")
 
         bucket = "search" if path.startswith("/search/") else "core"
         hold = self.db.execute(
@@ -141,6 +145,7 @@ class Snapshot:
         tree_sha = commit["commit"]["tree"]["sha"]
         tree = api.get(f"{self.endpoint}/git/trees/{tree_sha}", {"recursive": 1}, ttl=31_536_000)
         self.incomplete = bool(tree.get("truncated"))
+        self.paths = {row["path"] for row in tree["tree"]}
         self.files = {
             row["path"]: row for row in tree["tree"]
             if row["type"] == "blob" and row["mode"] in {"100644", "100755"}
@@ -178,7 +183,7 @@ class Snapshot:
             low = path.casefold()
             name = PurePosixPath(low).name
             if (
-                name.split(".")[0] in {"contributing", "agents", "ai_policy", "ai-policy", "llms",
+                name.split(".")[0] in {"contributing", "agents", "claude", "gemini", "ai_policy", "ai-policy", "llms",
                                         "issue_template", "pull_request_template", "code_of_conduct"}
                 or low.startswith((".github/issue_template/", ".github/pull_request_template/"))
                 or re.search(r"(?:ai|llm|generative)[_-](?:usage|contributions?|policy|guidelines)", low)

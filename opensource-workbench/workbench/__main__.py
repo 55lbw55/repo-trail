@@ -7,6 +7,7 @@ from pathlib import Path
 
 from platformdirs import user_cache_path
 
+from . import __version__
 from .contribution import contribution_draft
 from .github import GitHub, WorkbenchError
 from .reuse import reuse_plan, search
@@ -14,6 +15,7 @@ from .reuse import reuse_plan, search
 
 def parser():
     command = argparse.ArgumentParser(prog="python -m workbench", description="开源工作台")
+    command.add_argument("--version", action="version", version=__version__)
     command.add_argument("--cache-dir", type=Path, help="覆盖平台默认的用户缓存目录")
     cache_mode = command.add_mutually_exclusive_group()
     cache_mode.add_argument("--offline", action="store_true", help="仅用已有公开缓存")
@@ -45,11 +47,19 @@ def parser():
     draft.add_argument("--ref", default="HEAD", help="HEAD 或完整 SHA")
     draft.add_argument("--kind", choices=("docs", "platform", "good-first"), default="docs")
     draft.add_argument("--issue", type=int, help="人工核对过的现有 Issue 编号")
+    draft.add_argument("--related-pr", type=int, help="已有覆盖此变更的 PR 编号，仅生成本地验证材料")
     draft.add_argument("--evidence", type=Path, help="公开证据与精确编辑 JSON")
     draft.add_argument("--policy-reviewed", action="store_true", help="人工核对上游规则和外链")
+    draft.add_argument("--human-pr-body", action="store_true", help="仅生成补丁和证据，正文由贡献者填写")
     draft.add_argument("--related-reviewed", action="store_true", help="人工判断列出的 Issue 和 PR 均非重复")
     draft.add_argument("--route", choices=("issue", "direct-pr"), default="issue")
     draft.add_argument("--patch", type=Path, help="本地补丁输出")
+    draft.add_argument("--scan", action="store_true", help="按项目规模抽查 Markdown，以单个线索为上限")
+    draft.add_argument("--scope", help="抽查目录或文件，相对仓库根目录")
+    draft.add_argument("--reference", help="可选 Go 文件，用 mapstructure 或 Cobra 定义对照示例")
+    draft.add_argument("--local-repo", type=Path, help="从已在本地的 Git 对象读取固定版本")
+    draft.add_argument("--scan-rounds", type=int, choices=range(1, 11), default=2, metavar="1–10")
+    draft.add_argument("--scan-max-files", type=int, choices=range(1, 61), default=25, metavar="1–60")
 
     for action in (find, plan, draft):
         action.add_argument("--keywords", required=True, help="可发送给 GitHub 的公开关键词")
@@ -89,6 +99,14 @@ def main():
             raise WorkbenchError("创建复用审查时须同时提供 --branch 和 --patch。")
         if args.action == "contribution-draft" and args.issue is not None and args.issue < 1:
             raise WorkbenchError("Issue 编号须为正整数。")
+        if args.action == "contribution-draft" and args.related_pr is not None and args.related_pr < 1:
+            raise WorkbenchError("PR 编号须为正整数。")
+        if args.action == "contribution-draft" and args.scan and (args.evidence or patch or args.issue or args.related_pr):
+            raise WorkbenchError("请先用 --scan 发现候选，再用证据与 Issue 编号单独准备草稿。")
+        if args.action == "contribution-draft" and args.scan and args.kind == "good-first":
+            raise WorkbenchError("good-first 使用维护者标签检索，请省略 --scan。")
+        if args.action == "contribution-draft" and not args.scan and (args.scope or args.reference):
+            raise WorkbenchError("--scope 和 --reference 仅用于 --scan。")
         if args.action == "contribution-draft" and args.route == "direct-pr" and not args.policy_reviewed:
             raise WorkbenchError("准备直接 PR 前须人工核对贡献规则和外链。")
         api = GitHub(cache_directory(args.cache_dir, args.offline), args.offline, args.refresh)

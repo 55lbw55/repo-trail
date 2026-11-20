@@ -1,5 +1,7 @@
 # 开源工作台
 
+当前版本 0.2.0。
+
 在本地检索公开 GitHub 仓库、评估代码复用，并为单个上游问题准备证据、草稿和补丁。需要 Python 3.11+ 和 Git。以下命令在本目录运行，示例使用 PowerShell 7。在已激活的 Python 虚拟环境中安装 [已核验的 platformdirs 发行包](third_party/platformdirs.md)。
 
 ```powershell
@@ -53,6 +55,18 @@ python -m workbench contribution-draft --repo Textualize/rich --ref 3a109ccdffe5
 确认已有 Issue 对应同一问题时，用 `--issue` 关联。如果搜索只命中无关条目，审查后用 `--related-reviewed` 准备新 Issue 草稿。上游规则允许直接 PR 时，可显式使用 `--route direct-pr --policy-reviewed`。核对政策和外链后加上 `--policy-reviewed --patch rich-docstring.patch` 生成可审查补丁。证据范例中每个 claim 有 `path` 与精确的 `text`。每个 edit 有 `path`、`before` 和 `after`。补丁最多支持四处精确文本编辑。可用 `pr_checklists` 提供上游模板勾选项，用 `assistance` 记录准备草稿时实际使用的工具。
 
 发布 Issue、推送分支和创建 PR 由你审核目标、正文与 diff 后在 Chrome 完成。CLI 没有 GitHub 写接口，也不访问浏览器会话。
+
+### 按规模抽查上游
+
+```powershell
+python -m workbench contribution-draft --repo ollama/ollama --scan --scope docs --keywords cli --reference cmd/cmd.go --out scan.md
+```
+
+- 先以固定 commit 的文件树判定规模。普通文件达到 1,000 个或符合条件的 Markdown 文件达到 200 个，视为大型。达到 200 个普通文件或 40 个 Markdown 文件，视为中型。可以用 `--scope` 缩小到模块、目录或单个文件。
+- 中型和大型项目每轮检查范围内约 5% 的 Markdown 文件，向上取整，至少 1 个。小型项目每轮最多检查 12 个。路径关键词决定优先级，同优先级按固定 commit 的散列排序。没有命中时自动检查下一批，默认 2 轮、最多 25 个文档。用 `--scan-rounds` 和 `--scan-max-files` 调整。命中即停，报告记录实际覆盖率。这里的百分比以选定范围的可读候选文档为分母。
+- 基础检查寻找可定位新目标的 Markdown 相对链接。如果指定 `--reference`，还可把 YAML 示例与 Go 的 `mapstructure` 字段对照，或把短命令示例与 Cobra 定义对照。发现显式嵌入的共享配置时会再追一层，最多查三个同仓库的 `config.go`。抽查线索须经过人工核实。覆盖范围、文件大小和支持的例子语法决定了能找到的问题。
+- REST 受限期间，可传入已在本地的 Git 仓库 `--local-repo PATH`，例如已有的浅克隆。CLI 从 commit 对象读取，校验 `origin` 指向指定的 GitHub HTTPS 仓库。可结合 `--offline` 只读本地对象与已有查询缓存。提交前仍应确认本地 commit 已存在于上游。
+- 抽查后用证据 JSON 进入原有去重和补丁工作流。查询不可用时，报告将去重标为待完成。确认已有 PR 覆盖改动后，可用 `--related-pr 编号` 保留本地证据和验证补丁。上游要求真人撰写 PR 正文时可用 `--human-pr-body`，常见的明确规则也会触发该行为。测试运行 `python -m unittest discover -s tests -v`。
 
 ## 缓存、数据与验证边界
 
