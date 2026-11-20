@@ -1,6 +1,6 @@
 # 开源工作台
 
-当前版本 0.2.0。
+当前版本 0.3.0。
 
 在本地检索公开 GitHub 仓库、评估代码复用，并为单个上游问题准备证据、草稿和补丁。需要 Python 3.11+ 和 Git。以下命令在本目录运行，示例使用 PowerShell 7。在已激活的 Python 虚拟环境中安装 [已核验的 platformdirs 发行包](third_party/platformdirs.md)。
 
@@ -55,6 +55,16 @@ python -m workbench contribution-draft --repo Textualize/rich --ref 3a109ccdffe5
 确认已有 Issue 对应同一问题时，用 `--issue` 关联。如果搜索只命中无关条目，审查后用 `--related-reviewed` 准备新 Issue 草稿。上游规则允许直接 PR 时，可显式使用 `--route direct-pr --policy-reviewed`。核对政策和外链后加上 `--policy-reviewed --patch rich-docstring.patch` 生成可审查补丁。证据范例中每个 claim 有 `path` 与精确的 `text`。每个 edit 有 `path`、`before` 和 `after`。补丁最多支持四处精确文本编辑。可用 `pr_checklists` 提供上游模板勾选项，用 `assistance` 记录准备草稿时实际使用的工具。
 
 发布 Issue、推送分支和创建 PR 由你审核目标、正文与 diff 后在 Chrome 完成。CLI 没有 GitHub 写接口，也不访问浏览器会话。
+
+### 审查并交接到 Chrome
+
+```powershell
+python -m workbench contribution-draft --repo owner/repo --keywords 'public symptom' --evidence evidence.json --policy-reviewed --publish issue --publish-out issue-review.md
+```
+
+`--publish issue` 重新在线核对 Issue 和 PR，检查仓库是否接收 Issue，输出目标、准确标题和正文。已有对应 Issue 时沿用它，已发现对应 PR 时使用 `--related-pr`。只有确认搜索命中均无关时才加 `--related-reviewed`。从审查稿打开 GitHub，按上游模板核对后点击提交。也可使用新的输出文件路径重跑并加 `--open-chrome`。普通表单可以预填，使用自定义模板时会打开 GitHub 模板选择页，正文可从审查稿复制。
+
+PR 使用 `--publish pr --publish-out pr-review.md`，同时提供 `--patch`、`--pr-base main`、`--pr-head owner:branch` 和已审查的 `--pr-head-sha`。分支须已推送，程序会核对远端 base、head 和改动文件列表，并交接到 Chrome 比较页。最终 diff 以 GitHub 比较页为准。上游要求真人撰写时，从贡献报告中的规则链接和本地验证材料手动填写。
 
 ### 按规模抽查上游
 

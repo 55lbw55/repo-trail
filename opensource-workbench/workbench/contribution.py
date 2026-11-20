@@ -82,9 +82,9 @@ def policy(snapshot, paths_in_scope):
     return lines, human_body
 
 
-def search_related(api, snapshot, keywords, kind):
+def search_related(api, snapshot, keywords, kind, *, fresh=False):
     q = f"repo:{snapshot.repo} is:{kind} {keywords}"
-    data = api.get("/search/issues", {"q": q, "per_page": 10})
+    data = api.get("/search/issues", {"q": q, "per_page": 10}, ttl=0 if fresh else 900)
     return q, data["items"], bool(data["incomplete_results"]), data["total_count"]
 
 
@@ -195,7 +195,7 @@ def contribution_draft(api, args):
     unavailable = False
     for kind, label in (("issue", "Issue"), ("pr", "PR")):
         try:
-            query, rows, partial, count = search_related(api, snapshot, args.keywords, kind)
+            query, rows, partial, count = search_related(api, snapshot, args.keywords, kind, fresh=bool(args.publish))
         except (CacheMiss, RateLimited) as error:
             if not args.local_repo:
                 raise
@@ -268,8 +268,18 @@ def contribution_draft(api, args):
     actual_line = locate(snapshot.text(actual_path), actual_text)
     if expected_path == actual_path and expected_line == actual_line:
         raise WorkbenchError("预期与实际证据应指向不同的行或文件。")
-    related_clear = not unavailable and (args.related_reviewed or not (incomplete or results["issue"] or results["pr"]))
+    other_issues = [row for row in results["issue"] if not issue or row["number"] != issue["number"]]
+    related_clear = not unavailable and (args.related_reviewed or not (incomplete or other_issues or results["pr"]))
     review_only = human_body or bool(existing_pr)
+    if args.publish:
+        if review_only:
+            raise WorkbenchError("已有相关 PR 或上游要求真人正文，请沿用现有流程。")
+        if not related_clear:
+            raise WorkbenchError("发布审查前须完成在线去重。人工确认命中均不重复后可用 --related-reviewed。")
+        if args.publish == "issue" and issue:
+            raise WorkbenchError("已有对应 Issue，请沿用该 Issue。")
+        if args.publish == "pr" and not issue and args.route != "direct-pr":
+            raise WorkbenchError("准备 PR 需要现有 Issue，或确认上游允许 --route direct-pr。")
     draft_kind = "Issue 草稿" if not issue and args.route == "issue" and related_clear and not review_only else "贡献候选"
     report += [
         "", f"## {draft_kind} · {inline(spec['title'])}", "",
@@ -284,13 +294,13 @@ def contribution_draft(api, args):
                    else "- 提交前核对相似命中，确认没有重复 PR 或相关 Issue。"]
     elif draft_kind == "贡献候选" and not issue:
         report += ["- 发布前确认相关命中是否覆盖同一问题。"]
+    syntax_checked = []
+    diff = None
     if args.patch:
         if not args.policy_reviewed:
             raise WorkbenchError("生成补丁前，请阅读报告中的政策链接并确认 --policy-reviewed。")
         template_sections = [] if review_only else pr_template_sections(spec)
         diff, syntax_checked = make_patch(snapshot, spec.get("edits"), actual_path, actual_text)
-        with args.patch.open("xb") as stream:
-            stream.write(diff)
         if review_only:
             report += ["", "## 本地补丁与验证记录", ""]
             if human_body:
@@ -320,4 +330,20 @@ def contribution_draft(api, args):
             report += ["", "后续以已有 PR 的处理结果为准。"]
         else:
             report += ["", "在 Chrome 发布前，核对目标、对应 Issue、上游模板与政策、正文和本地补丁。"]
+    handoff = None
+    if args.publish:
+        from .submission import prepare_handoff
+        evidence = (expected_path, expected_line, actual_path, actual_line)
+        handoff = prepare_handoff(api, snapshot, args, spec, evidence, issue, syntax_checked)
+    if diff is not None:
+        with args.patch.open("xb") as stream:
+            stream.write(diff)
+    if handoff:
+        with args.publish_out.open("x", encoding="utf-8", newline="\n") as stream:
+            stream.write(handoff.review(snapshot))
+        report += ["", "## 发布交接", "", f"- [GitHub {handoff.kind} 表单]({handoff.url})",
+                   "- 精确标题和正文已写入单独的发布审查稿。"]
+        if args.open_chrome:
+            from .submission import open_chrome
+            open_chrome(handoff)
     return report

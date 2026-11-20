@@ -54,6 +54,12 @@ def parser():
     draft.add_argument("--related-reviewed", action="store_true", help="人工判断列出的 Issue 和 PR 均非重复")
     draft.add_argument("--route", choices=("issue", "direct-pr"), default="issue")
     draft.add_argument("--patch", type=Path, help="本地补丁输出")
+    draft.add_argument("--publish", choices=("issue", "pr"), help="生成可交接给 Chrome 的发布审查稿")
+    draft.add_argument("--publish-out", type=Path, help="单独输出将进入 GitHub 表单的标题和正文")
+    draft.add_argument("--open-chrome", action="store_true", help="打开表单，最后的提交按钮留给审核后的操作")
+    draft.add_argument("--pr-base", help="GitHub 上游目标分支")
+    draft.add_argument("--pr-head", help="已推送并审查的 GitHub 分支，格式 owner:branch")
+    draft.add_argument("--pr-head-sha", help="已核对的远端 head 完整 SHA")
     draft.add_argument("--scan", action="store_true", help="按项目规模抽查 Markdown，以单个线索为上限")
     draft.add_argument("--scope", help="抽查目录或文件，相对仓库根目录")
     draft.add_argument("--reference", help="可选 Go 文件，用 mapstructure 或 Cobra 定义对照示例")
@@ -89,10 +95,12 @@ def main():
     api = None
     try:
         patch = getattr(args, "patch", None)
-        output_path(args.out)
-        output_path(patch)
-        if patch and args.out and patch.resolve() == args.out.resolve():
-            raise WorkbenchError("报告和补丁须使用不同的文件路径。")
+        publish_out = getattr(args, "publish_out", None)
+        paths = [path for path in (args.out, patch, publish_out) if path is not None]
+        for path in paths:
+            output_path(path)
+        if len({path.resolve() for path in paths}) != len(paths):
+            raise WorkbenchError("报告、补丁、发布审查稿须使用不同的文件路径。")
         if hasattr(args, "project") and not args.project.is_dir():
             raise WorkbenchError("--project 须指向存在的本地目录。")
         if args.action == "reuse-plan" and bool(args.branch) != bool(patch):
@@ -109,6 +117,15 @@ def main():
             raise WorkbenchError("--scope 和 --reference 仅用于 --scan。")
         if args.action == "contribution-draft" and args.route == "direct-pr" and not args.policy_reviewed:
             raise WorkbenchError("准备直接 PR 前须人工核对贡献规则和外链。")
+        if args.action == "contribution-draft":
+            if args.publish and (args.offline or args.scan or not args.evidence or not args.policy_reviewed or not publish_out):
+                raise WorkbenchError("发布审查需要联网、证据、--policy-reviewed 和 --publish-out。")
+            if not args.publish and (publish_out or args.open_chrome):
+                raise WorkbenchError("--publish-out 和 --open-chrome 必须与 --publish 一起使用。")
+            if args.publish == "pr" and (not patch or not args.pr_base or not args.pr_head or not args.pr_head_sha):
+                raise WorkbenchError("PR 发布审查需要 --patch、--pr-base、--pr-head 和 --pr-head-sha。")
+            if args.publish != "pr" and (args.pr_base or args.pr_head or args.pr_head_sha):
+                raise WorkbenchError("PR 分支参数仅用于 --publish pr。")
         api = GitHub(cache_directory(args.cache_dir, args.offline), args.offline, args.refresh)
         handler = {"search": search, "reuse-plan": reuse_plan, "contribution-draft": contribution_draft}
         content = "\n".join(handler[args.action](api, args)).rstrip() + "\n"
