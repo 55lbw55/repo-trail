@@ -80,6 +80,23 @@ def markdown_parts(source):
     return paragraph, examples
 
 
+def repeated_directory_target(destination, choices):
+    parts = destination.split("/")
+    matches = []
+    for choice in choices:
+        candidate = choice.split("/")
+        width = len(parts) - len(candidate)
+        if width < 1:
+            continue
+        for start in range(len(parts) - 2 * width):
+            end = start + width
+            if (parts[start:end] == parts[end:end + width]
+                    and parts[:start] + parts[end:] == candidate):
+                matches.append(choice)
+                break
+    return matches[0] if len(matches) == 1 else None
+
+
 def link_finding(path, paragraph, all_paths, by_name):
     for number, line in paragraph:
         for match in LINK.finditer(line):
@@ -95,11 +112,16 @@ def link_finding(path, paragraph, all_paths, by_name):
             if destination in all_paths or destination.startswith("../"):
                 continue
             choices = by_name.get(posixpath.basename(relative).casefold(), [])
-            if len(choices) == 1 and choices[0] != path:
-                replacement = posixpath.relpath(choices[0], posixpath.dirname(path) or ".")
+            match_path = repeated_directory_target(destination, choices)
+            if match_path is None:
+                docs = [choice for choice in choices if PurePosixPath(choice).suffix.lower() in DOCS]
+                if len(docs) == 1:
+                    match_path = docs[0]
+            if match_path and match_path != path:
+                replacement = posixpath.relpath(match_path, posixpath.dirname(path) or ".")
                 if re.fullmatch(r"[A-Za-z0-9._/-]+", replacement):
                     suffix = f"#{url.fragment}" if url.fragment else ""
-                    return Finding(path, number, target, replacement + suffix, choices[0])
+                    return Finding(path, number, target, replacement + suffix, match_path)
     return None
 
 
@@ -273,8 +295,7 @@ def scan(snapshot, args, keywords):
         return report
     by_name = defaultdict(list)
     for path in snapshot.files:
-        if PurePosixPath(path).suffix.lower() in DOCS:
-            by_name[posixpath.basename(path).casefold()].append(path)
+        by_name[posixpath.basename(path).casefold()].append(path)
     tags = {}
     commands = {}
     reference = None

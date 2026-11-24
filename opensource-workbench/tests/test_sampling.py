@@ -61,6 +61,18 @@ class SamplingTests(unittest.TestCase):
         self.assertIn("7/100", report)
         self.assertEqual(len(snapshot.reads), 7)
 
+    def test_duplicate_directory_link_can_locate_source_file(self):
+        contents = {
+            "docs/guide.md": "[driver](../packages/core/packages/core/src/types.ts#L38)",
+            "packages/core/src/types.ts": "export interface Driver {}",
+            "packages/extra/src/types.ts": "export interface Extra {}",
+        }
+        report = "\n".join(scan(Snapshot(contents), options(), ["guide"]))
+        self.assertIn("../packages/core/src/types.ts#L38", report)
+        contents["docs/guide.md"] = "[driver](../old/types.ts)"
+        report = "\n".join(scan(Snapshot(contents), options(), ["guide"]))
+        self.assertNotIn("单个待核对线索", report)
+
     def test_go_squash_follows_same_repo_type_and_uses_its_line(self):
         snapshot = Snapshot({
             "receiver/config.go": 'package receiver\nimport alias "github.com/org/tool/internal/shared"\n'

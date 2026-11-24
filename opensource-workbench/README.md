@@ -1,6 +1,6 @@
 # 开源工作台
 
-当前版本 0.4.0。
+当前版本 0.4.1。
 
 在本地检索公开 GitHub 仓库、评估代码复用，并为单个上游问题准备证据、草稿和补丁。需要 Python 3.11+ 和 Git。以下命令在本目录运行，示例使用 PowerShell 7。在已激活的 Python 虚拟环境中安装 [已核验的 platformdirs 发行包](third_party/platformdirs.md)。
 
@@ -82,7 +82,7 @@ python -m workbench contribution-draft --repo ollama/ollama --scan --scope docs 
 
 - 先以固定 commit 的文件树判定规模。普通文件达到 1,000 个或符合条件的 Markdown 文件达到 200 个，视为大型。达到 200 个普通文件或 40 个 Markdown 文件，视为中型。可以用 `--scope` 缩小到模块、目录或单个文件。
 - 中型和大型项目每轮检查范围内约 5% 的 Markdown 文件，向上取整，至少 1 个。小型项目每轮最多检查 12 个。路径关键词决定优先级，同优先级按固定 commit 的散列排序。没有命中时自动检查下一批，默认 2 轮、最多 25 个文档。用 `--scan-rounds` 和 `--scan-max-files` 调整。命中即停，报告记录实际覆盖率。这里的百分比以选定范围的可读候选文档为分母。
-- 基础检查寻找可定位新目标的 Markdown 相对链接，以及源码已迁移到 `pyproject.toml` 后残留的 `setup.py install` 示例。如果指定 `--reference`，还可把 YAML 示例与 Go 的 `mapstructure` 字段对照，或把短命令示例与 Cobra 定义对照。发现显式嵌入的共享配置时会再追一层，最多查三个同仓库的 `config.go`。抽查线索须经过人工核实。覆盖范围、文件大小和支持的例子语法决定了能找到的问题。
+- 基础检查寻找可定位新目标的 Markdown 相对链接，以及源码已迁移到 `pyproject.toml` 后残留的 `setup.py install` 示例。对于链接中连续重复的目录，若去掉其中一份后能唯一定位到仓库文件，也会报告源代码链接。报告保留原有片段，行号和标题锚点须单独核对。如果指定 `--reference`，还可把 YAML 示例与 Go 的 `mapstructure` 字段对照，或把短命令示例与 Cobra 定义对照。发现显式嵌入的共享配置时会再追一层，最多查三个同仓库的 `config.go`。抽查线索须经过人工核实。覆盖范围、文件大小和支持的例子语法决定了能找到的问题。
 - REST 受限期间，可传入已在本地的 Git 仓库 `--local-repo PATH`，例如已有的浅克隆。CLI 从 commit 对象读取，校验 `origin` 指向指定的 GitHub HTTPS 仓库。可结合 `--offline` 只读本地对象与已有查询缓存。提交前仍应确认本地 commit 已存在于上游。
 - 抽查后用证据 JSON 进入原有去重和补丁工作流。查询不可用时，报告将去重标为待完成。确认已有 PR 覆盖改动后，可用 `--related-pr 编号` 保留本地证据和验证补丁。上游要求真人撰写 PR 正文时可用 `--human-pr-body`，常见的明确规则也会触发该行为。测试运行 `python -m unittest discover -s tests -v`。
 
